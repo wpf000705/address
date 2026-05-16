@@ -6,6 +6,7 @@ REPO_URL="${REPO_URL:-https://github.com/wpf000705/address.git}"
 APP_DIR="${APP_DIR:-$HOME/${APP_NAME}}"
 PORT="${PORT:-3000}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
+DOCKER_START_RETRIES="${DOCKER_START_RETRIES:-60}"
 
 log() {
   printf '%s\n' "$1"
@@ -93,11 +94,46 @@ install_node20() {
   fi
 }
 
+install_docker() {
+  if docker_compose_available; then
+    return
+  fi
+
+  log "Docker Compose was not found. Installing Docker..."
+
+  if is_debian_like; then
+    run_as_root apt-get update
+    run_as_root apt-get install -y ca-certificates curl
+    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+    run_as_root sh /tmp/get-docker.sh
+    rm -f /tmp/get-docker.sh
+  elif is_macos && has_cmd brew; then
+    brew install --cask docker || true
+    if has_cmd open; then
+      open -a Docker || true
+    fi
+  else
+    log "Could not install Docker automatically on this system."
+    log "Please install Docker Desktop or Docker Engine with Docker Compose, then run this installer again."
+    exit 1
+  fi
+
+  if ! docker_compose_available; then
+    log "Docker installation finished, but Docker Compose is still unavailable."
+    log "Please restart your terminal or install Docker Compose, then run this installer again."
+    exit 1
+  fi
+}
+
 compose_cmd() {
   if has_cmd docker && docker compose version >/dev/null 2>&1; then
     docker compose "$@"
-  elif has_cmd docker-compose; then
+  elif has_cmd docker && has_cmd sudo && sudo docker compose version >/dev/null 2>&1; then
+    sudo docker compose "$@"
+  elif has_cmd docker-compose && docker-compose version >/dev/null 2>&1; then
     docker-compose "$@"
+  elif has_cmd docker-compose && has_cmd sudo && sudo docker-compose version >/dev/null 2>&1; then
+    sudo docker-compose "$@"
   else
     return 127
   fi
@@ -108,7 +144,40 @@ docker_compose_available() {
 }
 
 docker_running() {
-  has_cmd docker && docker info >/dev/null 2>&1
+  if has_cmd docker && docker info >/dev/null 2>&1; then
+    return 0
+  fi
+  has_cmd docker && has_cmd sudo && sudo docker info >/dev/null 2>&1
+}
+
+start_docker() {
+  if docker_running; then
+    return 0
+  fi
+
+  if is_macos; then
+    if has_cmd open; then
+      open -a Docker || true
+    fi
+  else
+    if has_cmd systemctl; then
+      run_as_root systemctl enable --now docker || true
+    fi
+    if ! docker_running && has_cmd service; then
+      run_as_root service docker start || true
+    fi
+  fi
+
+  i=1
+  while [ "$i" -le "$DOCKER_START_RETRIES" ]; do
+    if docker_running; then
+      return 0
+    fi
+    sleep 1
+    i=$((i + 1))
+  done
+
+  return 1
 }
 
 check_health() {
@@ -128,14 +197,7 @@ check_health() {
 }
 
 install_git
-
-docker_available=false
-if docker_compose_available; then
-  docker_available=true
-else
-  log "Docker Compose was not found. Falling back to Node.js installation."
-  install_node20
-fi
+install_docker
 
 if [ -d "$APP_DIR/.git" ]; then
   log "Updating existing app in $APP_DIR"
@@ -146,58 +208,44 @@ else
 fi
 
 cd "$APP_DIR"
-if [ "$docker_available" = false ]; then
-  npm ci
-fi
 
 log ""
 log "Install complete."
 
-if [ "$docker_available" = true ]; then
-  if ! docker_running; then
-    log "Docker is installed, but the Docker service is not running."
-    if is_macos; then
-      log "Please start Docker Desktop, then run this installer again."
-    else
-      log "Please start Docker, for example:"
-      log "  sudo systemctl start docker"
-      log "Then run this installer again."
-    fi
-    exit 1
+if ! start_docker; then
+  log "Docker is installed, but the Docker service is not running."
+  if is_macos; then
+    log "Please start Docker Desktop, wait until it finishes starting, then run this installer again."
+  else
+    log "Please start Docker, for example:"
+    log "  sudo systemctl start docker"
+    log "Then run this installer again."
   fi
-
-  log "Starting with Docker..."
-  PORT="$PORT" compose_cmd up -d --build
-
-  if ! check_health; then
-    log ""
-    log "Docker container started, but the health check did not pass at http://127.0.0.1:$PORT/api/health"
-    log "Check logs with:"
-    log "  cd $APP_DIR && docker compose logs -f"
-    exit 1
-  fi
-
-  log ""
-  log "Docker service is running and health check passed."
-  log "Open on this computer:"
-  log "  http://localhost:$PORT"
-  if has_cmd hostname; then
-    lan_ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
-    if [ -n "${lan_ip:-}" ]; then
-      log "Open from another computer on the same LAN:"
-      log "  http://$lan_ip:$PORT"
-    fi
-  fi
-  log ""
-  log "View logs:"
-  log "  cd $APP_DIR && docker compose logs -f"
-else
-  log "Docker Compose was not found, so the app was installed but not started in Docker."
-  log "Start it with Node:"
-  log "  cd $APP_DIR"
-  log "  PORT=$PORT npm start"
-  log ""
-  log "Or install Docker Desktop / Docker Compose, then run:"
-  log "  cd $APP_DIR"
-  log "  PORT=$PORT docker compose up -d --build"
+  exit 1
 fi
+
+log "Starting with Docker..."
+PORT="$PORT" compose_cmd up -d --build
+
+if ! check_health; then
+  log ""
+  log "Docker container started, but the health check did not pass at http://127.0.0.1:$PORT/api/health"
+  log "Check logs with:"
+  log "  cd $APP_DIR && docker compose logs -f"
+  exit 1
+fi
+
+log ""
+log "Docker service is running and health check passed."
+log "Open on this computer:"
+log "  http://localhost:$PORT"
+if has_cmd hostname; then
+  lan_ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  if [ -n "${lan_ip:-}" ]; then
+    log "Open from another computer on the same LAN:"
+    log "  http://$lan_ip:$PORT"
+  fi
+fi
+log ""
+log "View logs:"
+log "  cd $APP_DIR && docker compose logs -f"

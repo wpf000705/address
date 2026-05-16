@@ -31,7 +31,7 @@ macOS / Linux:
 curl -fsSL https://raw.githubusercontent.com/wpf000705/address/refs/heads/main/remote-install.sh | sh
 ```
 
-如果目标电脑已安装 Docker 和 Docker Compose，安装完成后会自动用 Docker 后台启动服务。
+脚本会检查并安装缺失的依赖。Linux 上会自动安装 Docker Engine 和 Docker Compose；macOS 上会尝试通过 Homebrew 安装 Docker Desktop。安装完成后会自动用 Docker 后台启动服务。
 
 打开本机:
 
