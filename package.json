@@ -1,0 +1,20 @@
+{
+  "name": "create-eth-address",
+  "version": "1.0.0",
+  "description": "Dockerized web app for generating Ethereum addresses with customizable export format.",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "package": "sh scripts/package.sh"
+  },
+  "dependencies": {
+    "ethers": "^6.15.0",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

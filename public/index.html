@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ETH 地址生成器</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace" aria-label="ETH 地址生成器">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Local Ethereum Wallet Generator</p>
+            <h1>ETH 地址生成器</h1>
+          </div>
+          <span class="status" id="status">待生成</span>
+        </header>
+
+        <div class="controls">
+          <label class="field count-field">
+            <span>生成数量</span>
+            <input id="count" type="number" min="1" max="100" value="1" />
+          </label>
+
+          <label class="field template-field">
+            <span>自定义格式</span>
+            <textarea id="template" rows="4">{address}----{privateKey}----{mnemonic}</textarea>
+          </label>
+
+          <div class="hints" aria-label="可用占位符">
+            <button type="button" data-token="{address}">{address}</button>
+            <button type="button" data-token="{privateKey}">{privateKey}</button>
+            <button type="button" data-token="{mnemonic}">{mnemonic}</button>
+            <button type="button" data-token="{index}">{index}</button>
+          </div>
+
+          <div class="actions">
+            <button class="primary" id="generate" type="button">生成地址</button>
+            <button id="copy" type="button" disabled>复制结果</button>
+            <button id="download" type="button" disabled>下载 TXT</button>
+          </div>
+        </div>
+
+        <section class="result-panel">
+          <div class="result-header">
+            <h2>结果</h2>
+            <span id="resultCount">0 条</span>
+          </div>
+          <textarea id="output" spellcheck="false" placeholder="生成后会显示: 地址----私钥----助记词"></textarea>
+        </section>
+
+        <p class="warning">
+          私钥和助记词等同于资产控制权。建议只在可信、离线或本地环境中使用，不要把生成结果发送给任何人。
+        </p>
+      </section>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
