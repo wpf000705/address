@@ -15,8 +15,10 @@ const host = process.env.HOST || "0.0.0.0";
 const publicDir = path.join(__dirname, "..", "public");
 
 const DEFAULT_TEMPLATE = "{address}----{privateKey}----{mnemonic}";
-const MAX_WALLETS_PER_REQUEST = 100;
+const MAX_WALLETS_PER_REQUEST = 100000;
 const MAX_TEMPLATE_LENGTH = 1000;
+const WALLET_OBJECT_RESPONSE_LIMIT = 1000;
+const GENERATION_BATCH_SIZE = 100;
 
 app.disable("x-powered-by");
 app.use(
@@ -63,7 +65,22 @@ function normalizeTemplate(value) {
   return value;
 }
 
-function createWallet() {
+function templateNeedsMnemonic(template) {
+  return /\{mnemonic\}/.test(template);
+}
+
+function createWallet(includeMnemonic) {
+  if (!includeMnemonic) {
+    const privateKey = `0x${crypto.randomBytes(32).toString("hex")}`;
+    const wallet = new Wallet(privateKey);
+
+    return {
+      address: wallet.address,
+      privateKey: wallet.privateKey,
+      mnemonic: ""
+    };
+  }
+
   const wallet = Wallet.createRandom({
     extraEntropy: crypto.randomBytes(32)
   });
@@ -91,23 +108,38 @@ app.get(/(^|\/)api\/health$/, (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post(/(^|\/)api\/wallets$/, (req, res) => {
+app.post(/(^|\/)api\/wallets$/, async (req, res) => {
   try {
     const count = normalizeCount(req.body?.count ?? 1);
     const template = normalizeTemplate(req.body?.template);
-    const wallets = Array.from({ length: count }, (_unused, i) => {
-      const wallet = createWallet();
-      return {
-        ...wallet,
-        formatted: formatWallet(template, wallet, i + 1)
-      };
-    });
+    const includeMnemonic = templateNeedsMnemonic(template);
+    const includeWalletObjects = count <= WALLET_OBJECT_RESPONSE_LIMIT;
+    const wallets = [];
+    const lines = [];
+
+    for (let i = 0; i < count; i += 1) {
+      const wallet = createWallet(includeMnemonic);
+      const formatted = formatWallet(template, wallet, i + 1);
+      lines.push(formatted);
+
+      if (includeWalletObjects) {
+        wallets.push({
+          ...wallet,
+          formatted
+        });
+      }
+
+      if ((i + 1) % GENERATION_BATCH_SIZE === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    }
 
     res.json({
       count,
       template,
       wallets,
-      text: wallets.map((wallet) => wallet.formatted).join("\n")
+      walletsTruncated: !includeWalletObjects,
+      text: lines.join("\n")
     });
   } catch (error) {
     res.status(400).json({
