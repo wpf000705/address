@@ -31,7 +31,19 @@ macOS / Linux:
 curl -fsSL https://raw.githubusercontent.com/wpf000705/address/refs/heads/main/remote-install.sh | sh
 ```
 
-安装完成后按提示进入项目目录并启动服务。
+如果目标电脑已安装 Docker 和 Docker Compose，安装完成后会自动用 Docker 后台启动服务。
+
+打开本机:
+
+```text
+http://localhost:3000
+```
+
+同一局域网内的其他电脑访问:
+
+```text
+http://目标电脑IP:3000
+```
 
 ## 手动安装
 
@@ -102,6 +114,12 @@ http://localhost:3000
 
 ```bash
 docker compose down
+```
+
+后台启动:
+
+```bash
+docker compose up -d --build
 ```
 
 ## 注意

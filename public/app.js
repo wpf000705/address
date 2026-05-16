@@ -8,6 +8,7 @@ const copyButton = document.querySelector("#copy");
 const downloadButton = document.querySelector("#download");
 const statusText = document.querySelector("#status");
 const resultCount = document.querySelector("#resultCount");
+const appBaseUrl = new URL(".", document.currentScript?.src || window.location.href);
 
 let latestText = "";
 
@@ -44,7 +45,7 @@ async function generateWallets() {
   setStatus("生成中");
 
   try {
-    const response = await fetch("/api/wallets", {
+    const response = await fetch(new URL("api/wallets", appBaseUrl), {
       method: "POST",
       headers: {
         "Content-Type": "application/json"

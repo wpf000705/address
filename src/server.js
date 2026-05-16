@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -10,6 +11,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
+const host = process.env.HOST || "0.0.0.0";
 const publicDir = path.join(__dirname, "..", "public");
 
 const DEFAULT_TEMPLATE = "{address}----{privateKey}----{mnemonic}";
@@ -27,13 +29,18 @@ app.use(
         imgSrc: ["'self'", "data:"],
         connectSrc: ["'self'"],
         baseUri: ["'self'"],
-        formAction: ["'self'"]
+        formAction: ["'self'"],
+        upgradeInsecureRequests: null
       }
     }
   })
 );
 app.use(express.json({ limit: "32kb" }));
 app.use(express.static(publicDir));
+
+app.get(/(^|\/)(app\.js|styles\.css)$/, (req, res) => {
+  res.sendFile(path.join(publicDir, req.params[1]));
+});
 
 function normalizeCount(value) {
   const count = Number(value);
@@ -80,11 +87,11 @@ function formatWallet(template, wallet, index) {
   return template.replace(/\{(address|privateKey|mnemonic|index|line)\}/g, (_, key) => values[key]);
 }
 
-app.get("/api/health", (_req, res) => {
+app.get(/(^|\/)api\/health$/, (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/api/wallets", (req, res) => {
+app.post(/(^|\/)api\/wallets$/, (req, res) => {
   try {
     const count = normalizeCount(req.body?.count ?? 1);
     const template = normalizeTemplate(req.body?.template);
@@ -113,6 +120,16 @@ app.get("*", (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
-app.listen(port, "0.0.0.0", () => {
-  console.log(`ETH address generator listening on port ${port}`);
+function getLanUrls() {
+  return Object.values(os.networkInterfaces())
+    .flatMap((networkInterface) => networkInterface ?? [])
+    .filter((entry) => entry.family === "IPv4" && !entry.internal)
+    .map((entry) => `http://${entry.address}:${port}`);
+}
+
+app.listen(port, host, () => {
+  console.log(`ETH address generator listening on http://localhost:${port}`);
+  for (const url of getLanUrls()) {
+    console.log(`LAN access: ${url}`);
+  }
 });

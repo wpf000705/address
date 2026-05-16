@@ -92,8 +92,24 @@ install_node20() {
   fi
 }
 
+compose_cmd() {
+  if has_cmd docker && docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+  elif has_cmd docker-compose; then
+    docker-compose "$@"
+  else
+    return 127
+  fi
+}
+
 install_git
-install_node20
+
+docker_available=false
+if has_cmd docker && compose_cmd version >/dev/null 2>&1; then
+  docker_available=true
+else
+  install_node20
+fi
 
 if [ -d "$APP_DIR/.git" ]; then
   log "Updating existing app in $APP_DIR"
@@ -104,13 +120,37 @@ else
 fi
 
 cd "$APP_DIR"
-npm ci
+if [ "$docker_available" = false ]; then
+  npm ci
+fi
 
 log ""
 log "Install complete."
-log "Start the app with:"
-log "  cd $APP_DIR"
-log "  PORT=$PORT npm start"
-log ""
-log "Then open:"
-log "  http://localhost:$PORT"
+
+if [ "$docker_available" = true ]; then
+  log "Starting with Docker..."
+  PORT="$PORT" compose_cmd up -d --build
+  log ""
+  log "Docker service is running."
+  log "Open on this computer:"
+  log "  http://localhost:$PORT"
+  if has_cmd hostname; then
+    lan_ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+    if [ -n "${lan_ip:-}" ]; then
+      log "Open from another computer on the same LAN:"
+      log "  http://$lan_ip:$PORT"
+    fi
+  fi
+  log ""
+  log "View logs:"
+  log "  cd $APP_DIR && docker compose logs -f"
+else
+  log "Docker Compose was not found, so the app was installed but not started in Docker."
+  log "Start it with Node:"
+  log "  cd $APP_DIR"
+  log "  PORT=$PORT npm start"
+  log ""
+  log "Or install Docker Desktop / Docker Compose, then run:"
+  log "  cd $APP_DIR"
+  log "  PORT=$PORT docker compose up -d --build"
+fi
