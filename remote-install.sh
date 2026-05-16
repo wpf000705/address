@@ -5,6 +5,7 @@ APP_NAME="create-address"
 REPO_URL="${REPO_URL:-https://github.com/wpf000705/address.git}"
 APP_DIR="${APP_DIR:-$HOME/${APP_NAME}}"
 PORT="${PORT:-3000}"
+HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
 
 log() {
   printf '%s\n' "$1"
@@ -102,12 +103,37 @@ compose_cmd() {
   fi
 }
 
+docker_compose_available() {
+  has_cmd docker && compose_cmd version >/dev/null 2>&1
+}
+
+docker_running() {
+  has_cmd docker && docker info >/dev/null 2>&1
+}
+
+check_health() {
+  url="http://127.0.0.1:$PORT/api/health"
+  i=1
+
+  while [ "$i" -le "$HEALTH_RETRIES" ]; do
+    if has_cmd curl && curl -fsS "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    sleep 1
+    i=$((i + 1))
+  done
+
+  return 1
+}
+
 install_git
 
 docker_available=false
-if has_cmd docker && compose_cmd version >/dev/null 2>&1; then
+if docker_compose_available; then
   docker_available=true
 else
+  log "Docker Compose was not found. Falling back to Node.js installation."
   install_node20
 fi
 
@@ -128,10 +154,31 @@ log ""
 log "Install complete."
 
 if [ "$docker_available" = true ]; then
+  if ! docker_running; then
+    log "Docker is installed, but the Docker service is not running."
+    if is_macos; then
+      log "Please start Docker Desktop, then run this installer again."
+    else
+      log "Please start Docker, for example:"
+      log "  sudo systemctl start docker"
+      log "Then run this installer again."
+    fi
+    exit 1
+  fi
+
   log "Starting with Docker..."
   PORT="$PORT" compose_cmd up -d --build
+
+  if ! check_health; then
+    log ""
+    log "Docker container started, but the health check did not pass at http://127.0.0.1:$PORT/api/health"
+    log "Check logs with:"
+    log "  cd $APP_DIR && docker compose logs -f"
+    exit 1
+  fi
+
   log ""
-  log "Docker service is running."
+  log "Docker service is running and health check passed."
   log "Open on this computer:"
   log "  http://localhost:$PORT"
   if has_cmd hostname; then
